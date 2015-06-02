@@ -1,0 +1,213 @@
+<html lang="en">
+<head>
+  <title>hello world</title>
+  <script src="http://code.jquery.com/jquery-1.11.0.min.js"></script>
+  <script src="http://code.jquery.com/jquery-migrate-1.2.1.min.js"></script>
+  <link href='http://fonts.googleapis.com/css?family=Pontano+Sans' rel='stylesheet' type='text/css'>
+  <link rel="stylesheet" href="//maxcdn.bootstrapcdn.com/font-awesome/4.3.0/css/font-awesome.min.css">
+  <style>
+  body {
+    padding:0;
+    margin:0;
+    font-size:30px;
+    background:#00A388;
+    color: #006B59;
+    font-family: 'Pontano Sans', sans-serif;
+  }
+  .outer {
+    display: table;
+    position: absolute;
+    width: 100%;
+    height: 100%;
+  }
+  .inner {
+    display: table-cell;
+    vertical-align: middle;
+  }
+  #container {
+    display:block;
+    margin:auto;
+    width:600px;
+  }
+  .form-group {
+    position:relative;
+    display:block;
+    margin:2em;
+  }
+  .before {
+    position: absolute;
+    left: -56px;
+    top: 11px;
+    color: #006B59;
+    text-align: right;
+    width: 50px;
+  }
+  input {
+    width:200px;
+    background:transparent;
+    border:none;
+    border-bottom:1px solid #f6f6f6;
+    margin-right:10px;
+    font-size:1em;
+    padding:.3em 0 .3em .3em;
+    color:white;
+    font-weight:700;
+    letter-spacing:0.1em;
+  }
+  input:focus {
+    outline:none;
+  }
+  .result {
+    font-weight:900;
+    color:#444;
+  }
+  #results {
+    visibility: hidden;
+  }
+  #results.show {
+    visibility: visible;
+  }
+  label {
+    font-weight:700;
+  }
+  select {
+    padding:10px;
+    background: transparent;
+    border:1px solid #f6f6f6;
+    color:#f6f6f6;
+    font-size:1em;
+    outline:none;
+    display: inline-block;
+    cursor:pointer;
+    font-family: 'Pontano Sans', sans-serif;
+    font-weight:700;
+  }
+  </style>
+</head>
+<body>
+  <div class="outer">
+    <div class="inner">
+      <div id="container">
+        <form>
+          <div class="form-group">
+            <div class="before"><span class="fa fa-usd"></span></div>
+            <input type="number" id="fpl-income">
+            <select id="fpl-income-rate">
+              <option value="week">week</option>
+              <option value="month">month</option>
+              <option value="year">year</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <div class="before"><span class="fa fa-home"></span></div>
+            <input type="number" id="fpl-household">
+            <label>people in household</label>
+          </div>
+
+          <div class="form-group" id="results">
+            <p>Based on the above information, you qualify for <strong><span id="result-level" class="result">Level B</span></strong>. This means you are required to pay <strong><span class="result" id="result-percentage">10%</span></strong> of the total cost of services.</p>
+          </div>
+
+        </form>
+      </div>
+    </div>
+  </div>
+  <script>
+  var VA_FPL_CALCULATOR = function ( options ) {
+    this.options = options || {};
+    this.showingResults = false;
+
+    // TODO: get these numbers from the FPLAPI once it is deployed 
+    this.base = 11770; // based on 2015
+    this.rate = 4160;  // per additional household member
+
+    this.resultDomElement = document.getElementById('results');
+    this.result_level = document.getElementById('result-level');
+    this.result_percentage = document.getElementById('result-percentage');
+    
+    this.data = {};
+    for ( var d = 0; d < options.length; d++ ) {
+      this.data[options[d]] = {};
+      this.data[options[d]].domElement = document.getElementById(options[d]);
+      value: null
+    };
+
+    // addEventHandlers();
+    for ( el in this.data ) {
+      console.log(el);
+      this.data[el].domElement.addEventListener('change', this.calculate.bind(this)); // change for select
+      this.data[el].domElement.addEventListener('keyup', this.calculate.bind(this));  // keydown for inputs
+    }
+  }
+
+  VA_FPL_CALCULATOR.prototype.calculate = function () {
+    var that = this;
+
+    var value = getFPL() * 100;
+
+    // if both values returned ar numbers, update the DOM
+    if ( !isNaN(value) ) this.update(value);
+    else {
+      this.resultDomElement.className = this.resultDomElement.className.replace(/\b show\b/, '');
+      this.showingResults = false;
+    }
+
+    function getFPL() {
+      var e = that.data['fpl-income-rate'].domElement;
+      var incomeValue = parseFloat(that.data['fpl-income'].domElement.value),
+          incomeValueRate = e.options[e.selectedIndex].value,
+          householdSize = parseInt(that.data['fpl-household'].domElement.value);
+
+      var multiplier = {
+        'week': 52,
+        'month': 12,
+        'year': 1
+      };
+
+      var income = incomeValue * multiplier[incomeValueRate];
+      that.currentValues = {
+        income: income,
+        householdSize: householdSize
+      };
+
+      // calculate FPL
+      var fpl = income / (that.base + (that.rate * (householdSize-1)));
+      return fpl;
+    }
+  }
+
+  VA_FPL_CALCULATOR.prototype.update = function ( fpl ) {
+    if (!this.showingResults) {
+      this.resultDomElement.className = this.resultDomElement.className + ' show';
+      this.showingResults = true;
+    }
+    var results = gatherResults(fpl);
+    function gatherResults(f) {
+      if ( f < 100 ) return ['Level A', '0%'];
+      else if ( f < 110 ) return ['Level B', '10%']
+      else if ( f < 133.29 ) return ['Level C', '25%']
+      else if ( f < 166.59 ) return ['Level D', '50%']
+      else if ( f < 200 ) return ['Level E', '75%']
+      else if ( f < 250 ) return ['Level F', '95%']
+      else return ['Level G', '100%']
+    }
+    this.result_level.innerHTML = results[0];
+    this.result_percentage.innerHTML = results[1];
+  }
+
+
+
+
+
+
+
+
+  function init() {
+    window.vafpl = new VA_FPL_CALCULATOR(['fpl-income', 'fpl-income-rate', 'fpl-household']);
+  }
+
+  window.onload = init;
+  </script>
+</body>
+</html>
